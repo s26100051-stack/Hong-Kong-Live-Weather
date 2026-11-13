@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hong Kong Live Weather - ICT Homework</title>
+    <!-- Load Google Font: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 1. Strict Global Box-Sizing & Base Reset */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100vh;
+            background-color: #f1f5f9;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        /* Tabular numbers for crisp temperature & rainfall alignment */
+        .tabular-nums {
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Smooth spin animation for refresh icon */
+        @keyframes spinOnce {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin-once {
+            animation: spinOnce 0.55s ease-in-out;
+        }
+
+        /* Custom clean accordion styling */
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        details[open] .accordion-chevron {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 flex justify-center items-start sm:py-6 sm:px-4">
+
+    <!-- Strict Mobile App Frame (max-width: 420px, full width on mobile, rounded card on desktop) -->
+    <main class="w-full max-w-[420px] min-h-screen sm:min-h-0 bg-slate-50 sm:bg-white sm:rounded-[28px] sm:shadow-xl sm:border sm:border-slate-200/80 p-4 sm:p-5 flex flex-col gap-4">
+
+        <!-- 2. Top Segmented Navigation Switcher -->
+        <nav aria-label="Weather API Switcher"
+             style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px; background: #e2e8f0; border-radius: 14px;">
+            <button
+                type="button"
+                id="tab-hko"
+                onclick="switchTab('hko')"
+                aria-pressed="true"
+                style="height: 40px; white-space: nowrap;"
+                class="rounded-[10px] bg-white text-slate-900 shadow-sm text-xs sm:text-[13px] font-semibold flex items-center justify-center gap-1.5 px-2 transition-all duration-150 cursor-pointer">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                <span>HKO Live (Free)</span>
+            </button>
+
+            <button
+                type="button"
+                id="tab-owm"
+                onclick="switchTab('owm')"
+                aria-pressed="false"
+                style="height: 40px; white-space: nowrap;"
+                class="rounded-[10px] bg-transparent text-slate-600 hover:text-slate-900 text-xs sm:text-[13px] font-semibold flex items-center justify-center gap-1.5 px-2 transition-all duration-150 cursor-pointer">
+                <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <span>OpenWeatherMap</span>
+            </button>
+        </nav>
+
+        <!-- ===================================================================== -->
+        <!-- VIEW 1: HONG KONG OBSERVATORY (HKO) LIVE VIEW (FREE / NO API KEY)     -->
+        <!-- ===================================================================== -->
+        <div id="view-hko" class="flex flex-col gap-3.5">
+
+            <!-- Clean Flexbox Header -->
+            <header class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h1 class="text-lg font-bold tracking-tight text-slate-900 truncate">
+                            Hong Kong Weather
+                        </h1>
+                        <span id="hko-status-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0">
+                            <span id="hko-status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                            <span id="hko-status-text">Live</span>
+                        </span>
+                    </div>
+                    <p id="hko-subtitle" class="text-xs text-slate-500 truncate">
+                        香港天文台實時天氣 &bull; Updating...
+                    </p>
+                </div>
+
+                <!-- Compact Refresh Button -->
+                <button
+                    type="button"
+                    onclick="refreshHkoWeather()"
+                    aria-label="Refresh HKO Weather"
+                    title="刷新天氣 Refresh"
+                    class="w-10 h-10 rounded-xl bg-slate-100 hover:bg-slate-200/80 active:bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 transition-colors cursor-pointer">
+                    <svg id="hko-refresh-icon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
+            </header>
+
+            <!-- Weather Cards Vertical Stack (Sha Tin, Mong Kok, Stanley) -->
+            <section id="hko-cards-list" aria-live="polite" style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Initial Skeleton Cards -->
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse h-[84px]"></div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse h-[84px]"></div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse h-[84px]"></div>
+            </section>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- VIEW 2: OPENWEATHERMAP API VIEW (REQUIRES USER API KEY)               -->
+        <!-- ===================================================================== -->
+        <div id="view-owm" class="hidden flex-col gap-3.5">
+
+            <!-- Clean Flexbox Header -->
+            <header class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h1 class="text-lg font-bold tracking-tight text-slate-900 truncate">
+                            Hong Kong Weather
+                        </h1>
+                        <span id="owm-status-pill" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0">
+                            <span id="owm-status-dot" class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            <span id="owm-status-text">API Key Needed</span>
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500 truncate">
+                        OpenWeatherMap API &bull; 需輸入個人密鑰
+                    </p>
+                </div>
+            </header>
+
+            <!-- API Key Input Card (Clean Vertical Stack - Zero Overflow) -->
+            <section class="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col gap-3">
+                <div style="display: flex; justify-content: space-between; align-items: center;" class="gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <label for="owm-key-input" class="text-xs font-bold text-slate-800 truncate">
+                            OpenWeatherMap API Key
+                        </label>
+                        <a
+                            href="https://home.openweathermap.org/api_keys"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex items-center gap-0.5 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 hover:underline bg-indigo-50/80 px-2 py-0.5 rounded-full border border-indigo-200/70 shrink-0 transition-colors">
+                            <span>Get Free Key</span>
+                            <span aria-hidden="true">&#8599;</span>
+                        </a>
+                    </div>
+                    <button
+                        type="button"
+                        onclick="clearOwmKey()"
+                        class="text-[11px] font-medium text-slate-400 hover:text-slate-600 shrink-0 cursor-pointer">
+                        Clear 清空
+                    </button>
+                </div>
+
+                <!-- Full-width Input Box (height: 42px, monospace) -->
+                <input
+                    type="text"
+                    id="owm-key-input"
+                    placeholder="Paste your API key here..."
+                    autocomplete="off"
+                    spellcheck="false"
+                    oninput="syncCodeSnippetKey(this.value)"
+                    onkeydown="if(event.key === 'Enter') loadOpenWeatherMap()"
+                    style="width: 100%; height: 42px;"
+                    class="px-3.5 rounded-xl bg-slate-50 border border-slate-300/90 text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all"
+                />
+
+                <!-- Full-width Primary Action Button -->
+                <button
+                    type="button"
+                    id="owm-load-btn"
+                    onclick="loadOpenWeatherMap()"
+                    style="width: 100%; height: 42px;"
+                    class="rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                    </svg>
+                    <span>Load Weather Data (獲取天氣)</span>
+                </button>
+
+                <!-- Status / Error Banner -->
+                <div id="owm-banner" class="p-3 rounded-xl bg-amber-50/90 border border-amber-200/80 text-xs text-amber-800 leading-relaxed">
+                    <strong>提示：</strong> OpenWeatherMap 需要先輸入有效的 API Key 才能調取沙田、旺角與赤柱的實時數據。
+                </div>
+            </section>
+
+            <!-- OpenWeatherMap Weather Cards Vertical Stack -->
+            <section id="owm-cards-list" aria-live="polite" style="display: flex; flex-direction: column; gap: 12px;">
+                <!-- Locked Cards Rendered via JS on Load -->
+            </section>
+        </div>
+
+        <!-- ===================================================================== -->
+        <!-- 6. COLLAPSIBLE ICT HOMEWORK INFO ACCORDION AT BOTTOM                  -->
+        <!-- ===================================================================== -->
+        <details class="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden mt-1">
+            <summary class="p-4 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-slate-50 transition-colors">
+                <div class="flex items-center gap-2.5 min-w-0">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                        </svg>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                            ICT Homework: API &amp; Code Guide
+                        </div>
+                        <div class="text-[11px] text-slate-500 truncate">
+                            查看使用的 API 及 API Key 填寫位置
+                        </div>
+                    </div>
+                </div>
+                <svg class="accordion-chevron w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </summary>
+
+            <div class="px-4 pb-4 pt-2 border-t border-slate-100 flex flex-col gap-3 text-xs text-slate-600">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200/70 space-y-1">
+                    <p class="font-bold text-slate-800">1. 使用了哪兩個 API？</p>
+                    <p class="leading-relaxed">
+                        &bull; <strong>Tab 1 (HKO Live)：</strong> 香港天文台官方開放數據 API (<code class="text-indigo-600 bg-white px-1 py-0.5 rounded border border-slate-200">rhrread</code>)，<strong>免費且免密鑰</strong>。<br>
+                        &bull; <strong>Tab 2 (OpenWeatherMap)：</strong> 國際第三方氣象 API (<code class="text-indigo-600 bg-white px-1 py-0.5 rounded border border-slate-200">/data/2.5/weather</code>)，需要填寫個人 API Key。
+                    </p>
+                </div>
+
+                <div class="space-y-1.5">
+                    <p class="font-bold text-slate-800">2. API Key 放在代碼的哪裡？</p>
+                    <pre style="overflow-x: auto;" class="bg-slate-900 text-slate-100 p-3 rounded-xl text-[11px] font-mono leading-relaxed"><code id="ict-code-block">// 你的 API Key 填在這裡 (Where your key goes):
+const API_KEY = "YOUR_API_KEY_HERE";
+
+// 調取沙田 (Sha Tin) 實時天氣的 API 網址:
+const url = `https://api.openweathermap.org/data/2.5/weather?lat=22.38&lon=114.19&appid=${API_KEY}&units=metric`;
+
+const res = await fetch(url);
+const data = await res.json();</code></pre>
+                </div>
+            </div>
+        </details>
+
+        <!-- Clean Subtle Footer -->
+        <footer class="text-center text-[11px] text-slate-400 pt-1 pb-2">
+            Kelvin's ICT Project &bull; Sha Tin &bull; Mong Kok &bull; Stanley
+        </footer>
+    </main>
+
+    <script>
+        /**
+         * ============================================================================
+         * 1. DISTRICT CONFIGURATION & API ENDPOINTS
+         * ============================================================================
+         */
+        const HKO_API_URL = "https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=rhrread&lang=en";
+        const OWM_API_URL = "https://api.openweathermap.org/data/2.5/weather";
+
+        const DISTRICTS = [
+            {
+                id: "shatin",
+                nameEn: "Sha Tin",
+                nameZh: "沙田",
+                hkoTempStation: "Sha Tin",
+                hkoRainDistrict: "Sha Tin",
+                lat: 22.38,
+                lon: 114.19,
+                demoTemp: 25.6,
+                demoRain: 0.0
+            },
+            {
+                id: "mongkok",
+                nameEn: "Mong Kok",
+                nameZh: "旺角",
+                hkoTempStation: "King's Park",
+                hkoFallbackStation: "Hong Kong Observatory",
+                hkoRainDistrict: "Yau Tsim Mong",
+                lat: 22.32,
+                lon: 114.17,
+                demoTemp: 26.2,
+                demoRain: 0.5
+            },
+            {
+                id: "stanley",
+                nameEn: "Stanley",
+                nameZh: "赤柱",
+                hkoTempStation: "Stanley",
+                hkoRainDistrict: "Southern",
+                lat: 22.22,
+                lon: 114.21,
+                demoTemp: 24.9,
+                demoRain: 0.0
+            }
+        ];
+
+        /**
+         * ============================================================================
+         * 2. TOP SEGMENTED TAB SWITCHER
+         * ============================================================================
+         */
+        function switchTab(tab) {
+            const viewHko = document.getElementById("view-hko");
+            const viewOwm = document.getElementById("view-owm");
+            const tabHko = document.getElementById("tab-hko");
+            const tabOwm = document.getElementById("tab-owm");
+
+            const activeClasses = "rounded-[10px] bg-white text-slate-900 shadow-sm text-xs sm:text-[13px] font-semibold flex items-center justify-center gap-1.5 px-2 transition-all duration-150 cursor-pointer";
+            const inactiveClasses = "rounded-[10px] bg-transparent text-slate-600 hover:text-slate-900 text-xs sm:text-[13px] font-semibold flex items-center justify-center gap-1.5 px-2 transition-all duration-150 cursor-pointer";
+
+            if (tab === "hko") {
+                viewHko.classList.remove("hidden");
+                viewHko.classList.add("flex");
+                viewOwm.classList.add("hidden");
+                viewOwm.classList.remove("flex");
+
+                tabHko.className = activeClasses;
+                tabHko.setAttribute("aria-pressed", "true");
+                tabOwm.className = inactiveClasses;
+                tabOwm.setAttribute("aria-pressed", "false");
+            } else {
+                viewOwm.classList.remove("hidden");
+                viewOwm.classList.add("flex");
+                viewHko.classList.add("hidden");
+                viewHko.classList.remove("flex");
+
+                tabOwm.className = activeClasses;
+                tabOwm.setAttribute("aria-pressed", "true");
+                tabHko.className = inactiveClasses;
+                tabHko.setAttribute("aria-pressed", "false");
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 3. CLEAN HORIZONTAL WEATHER CARD RENDERER (NO WRAPPING / NO COLLISION)
+         * ============================================================================
+         */
+        function renderWeatherCards(containerId, items) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = "";
+
+            items.forEach(item => {
+                const rainFormatted = Number(item.rainfall).toFixed(1);
+                const tempFormatted = Math.round(Number(item.temperature));
+                const isRaining = Number(item.rainfall) > 0;
+
+                const conditionText = item.condition || (isRaining ? "Rainy 有雨" : "Dry & Clear 晴朗");
+                const rainPillClass = isRaining
+                    ? "bg-sky-100 text-sky-800 border-sky-200/80"
+                    : "bg-slate-100 text-slate-600 border-slate-200/70";
+
+                const cardHTML = `
+                    <article style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-radius: 16px; background: #ffffff; border: 1px solid #e2e8f0;"
+                             class="shadow-xs gap-3">
+                        <!-- Left Side: Bold English Name + Chinese Name & Condition Subtitle -->
+                        <div class="min-w-0 flex-1">
+                            <h2 class="text-base font-bold text-slate-900 leading-tight truncate">
+                                ${item.nameEn}
+                            </h2>
+                            <p class="text-xs text-slate-500 mt-1 truncate">
+                                <span class="font-medium text-slate-700">${item.nameZh}</span> &bull; <span class="capitalize">${conditionText}</span>
+                            </p>
+                        </div>
+
+                        <!-- Right Side: Large Temperature on Top + Neat Rain Pill Underneath -->
+                        <div class="flex flex-col items-end shrink-0">
+                            <div class="text-2xl font-extrabold text-slate-900 leading-none tabular-nums">
+                                ${tempFormatted}&deg;C
+                            </div>
+                            <div class="mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border tabular-nums ${rainPillClass}">
+                                <span aria-hidden="true">&#128167;</span>
+                                <span>${rainFormatted} mm</span>
+                            </div>
+                        </div>
+                    </article>
+                `;
+
+                container.insertAdjacentHTML("beforeend", cardHTML);
+            });
+        }
+
+        /**
+         * Renders locked placeholder cards for OpenWeatherMap before a valid key is submitted
+         */
+        function renderOwmLockedCards(statusNote = "Locked &bull; Enter API Key") {
+            const container = document.getElementById("owm-cards-list");
+            container.innerHTML = "";
+
+            DISTRICTS.forEach(dist => {
+                const cardHTML = `
+                    <article style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-radius: 16px; background: #ffffff; border: 1px dashed #cbd5e1;"
+                             class="gap-3 opacity-85">
+                        <!-- Left Side -->
+                        <div class="min-w-0 flex-1">
+                            <h2 class="text-base font-bold text-slate-800 leading-tight truncate">
+                                ${dist.nameEn}
+                            </h2>
+                            <p class="text-xs text-slate-400 mt-1 truncate">
+                                <span class="font-medium text-slate-500">${dist.nameZh}</span> &bull; <span>${statusNote}</span>
+                            </p>
+                        </div>
+
+                        <!-- Right Side Placeholder -->
+                        <div class="flex flex-col items-end shrink-0">
+                            <div class="text-2xl font-extrabold text-slate-300 leading-none tabular-nums">
+                                --&deg;C
+                            </div>
+                            <div class="mt-1.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-400 border border-slate-200/70 tabular-nums">
+                                <span aria-hidden="true">&#128167;</span>
+                                <span>-- mm</span>
+                            </div>
+                        </div>
+                    </article>
+                `;
+                container.insertAdjacentHTML("beforeend", cardHTML);
+            });
+        }
+
+        /**
+         * ============================================================================
+         * 4. VIEW 1: FETCH HONG KONG OBSERVATORY (HKO) LIVE WEATHER
+         * ============================================================================
+         */
+        async function fetchHkoWeather() {
+            const pill = document.getElementById("hko-status-pill");
+            const dot = document.getElementById("hko-status-dot");
+            const text = document.getElementById("hko-status-text");
+            const subtitle = document.getElementById("hko-subtitle");
+
+            try {
+                const response = await fetch(HKO_API_URL);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+                const data = await response.json();
+                const tempList = data.temperature?.data || [];
+                const rainList = data.rainfall?.data || [];
+
+                const liveItems = DISTRICTS.map(dist => {
+                    let tempObj = tempList.find(t => t.place.toLowerCase() === dist.hkoTempStation.toLowerCase());
+                    if (!tempObj && dist.hkoFallbackStation) {
+                        tempObj = tempList.find(t => t.place.toLowerCase() === dist.hkoFallbackStation.toLowerCase());
+                    }
+                    const rainObj = rainList.find(r => r.place.toLowerCase() === dist.hkoRainDistrict.toLowerCase());
+
+                    return {
+                        nameEn: dist.nameEn,
+                        nameZh: dist.nameZh,
+                        temperature: tempObj ? tempObj.value : dist.demoTemp,
+                        rainfall: rainObj ? rainObj.max : dist.demoRain
+                    };
+                });
+
+                pill.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0";
+                dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+                text.textContent = "Live";
+
+                const timeStr = data.updateTime
+                    ? new Date(data.updateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                    : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                subtitle.textContent = `香港天文台實時天氣 • Updated ${timeStr}`;
+
+                renderWeatherCards("hko-cards-list", liveItems);
+
+            } catch (err) {
+                console.warn("HKO API fallback activated:", err);
+
+                pill.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0";
+                dot.className = "w-1.5 h-1.5 rounded-full bg-amber-500";
+                text.textContent = "Demo";
+                subtitle.textContent = "香港天文台數據 • Offline Demo Mode";
+
+                const demoItems = DISTRICTS.map(dist => ({
+                    nameEn: dist.nameEn,
+                    nameZh: dist.nameZh,
+                    temperature: dist.demoTemp,
+                    rainfall: dist.demoRain
+                }));
+
+                renderWeatherCards("hko-cards-list", demoItems);
+            }
+        }
+
+        function refreshHkoWeather() {
+            const icon = document.getElementById("hko-refresh-icon");
+            icon.classList.remove("spin-once");
+            void icon.offsetWidth;
+            icon.classList.add("spin-once");
+            fetchHkoWeather();
+        }
+
+        /**
+         * ============================================================================
+         * 5. VIEW 2: OPENWEATHERMAP API LOGIC (WITH USER API KEY)
+         * ============================================================================
+         */
+        function syncCodeSnippetKey(val) {
+            const cleanKey = val.trim() || "YOUR_API_KEY_HERE";
+            const codeEl = document.getElementById("ict-code-block");
+            codeEl.textContent = `// 你的 API Key 填在這裡 (Where your key goes):
+const API_KEY = "${cleanKey}";
+
+// 調取沙田 (Sha Tin) 實時天氣的 API 網址:
+const url = \`https://api.openweathermap.org/data/2.5/weather?lat=22.38&lon=114.19&appid=\${API_KEY}&units=metric\`;
+
+const res = await fetch(url);
+const data = await res.json();`;
+        }
+
+        function setOwmStatus(type, pillText, bannerHtml) {
+            const pill = document.getElementById("owm-status-pill");
+            const dot = document.getElementById("owm-status-dot");
+            const text = document.getElementById("owm-status-text");
+            const banner = document.getElementById("owm-banner");
+
+            text.textContent = pillText;
+            banner.innerHTML = bannerHtml;
+
+            if (type === "error") {
+                pill.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200/80 shrink-0";
+                dot.className = "w-1.5 h-1.5 rounded-full bg-rose-500";
+                banner.className = "p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 leading-relaxed";
+            } else if (type === "success") {
+                pill.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0";
+                dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+                banner.className = "p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 leading-relaxed";
+            } else if (type === "loading") {
+                pill.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shrink-0";
+                dot.className = "w-1.5 h-1.5 rounded-full bg-indigo-500";
+                banner.className = "p-3 rounded-xl bg-indigo-50 border border-indigo-200 text-xs text-indigo-800 leading-relaxed";
+            } else {
+                pill.className = "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0";
+                dot.className = "w-1.5 h-1.5 rounded-full bg-amber-500";
+                banner.className = "p-3 rounded-xl bg-amber-50/90 border border-amber-200/80 text-xs text-amber-800 leading-relaxed";
+            }
+        }
+
+        function clearOwmKey() {
+            const input = document.getElementById("owm-key-input");
+            input.value = "";
+            localStorage.removeItem("kelvin_owm_key");
+            syncCodeSnippetKey("");
+            setOwmStatus(
+                "warning",
+                "API Key Needed",
+                "<strong>提示：</strong> 已清空 API Key。請輸入有效的 OpenWeatherMap API Key 後點擊按鈕獲取數據。"
+            );
+            renderOwmLockedCards("Locked • Enter API Key");
+        }
+
+        async function loadOpenWeatherMap() {
+            const input = document.getElementById("owm-key-input");
+            const apiKey = input.value.trim();
+            syncCodeSnippetKey(apiKey);
+
+            // Check if key is empty
+            if (!apiKey) {
+                setOwmStatus(
+                    "error",
+                    "Missing Key",
+                    "<strong>錯誤：</strong> 你還沒有輸入 API Key！沒有 Key 無法調取 OpenWeatherMap API。"
+                );
+                renderOwmLockedCards("Missing API Key");
+                input.focus();
+                return;
+            }
+
+            // Save key locally for convenience
+            localStorage.setItem("kelvin_owm_key", apiKey);
+
+            setOwmStatus(
+                "loading",
+                "Loading...",
+                "正在向 <strong>api.openweathermap.org</strong> 請求沙田、旺角、赤柱實時天氣..."
+            );
+
+            // Show skeleton placeholders while fetching
+            const container = document.getElementById("owm-cards-list");
+            container.innerHTML = `
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse h-[84px]"></div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse h-[84px]"></div>
+                <div class="bg-white rounded-2xl p-4 border border-slate-200 animate-pulse h-[84px]"></div>
+            `;
+
+            try {
+                const requests = DISTRICTS.map(async (dist) => {
+                    const url = `${OWM_API_URL}?lat=${dist.lat}&lon=${dist.lon}&appid=${encodeURIComponent(apiKey)}&units=metric`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        const errObj = new Error(data.message || `HTTP ${res.status}`);
+                        errObj.status = res.status;
+                        throw errObj;
+                    }
+
+                    const tempVal = data.main?.temp ?? 0;
+                    const rainVal = data.rain?.["1h"] ?? data.rain?.["3h"] ?? 0;
+                    const condText = data.weather?.[0]?.description || "Clear";
+
+                    return {
+                        nameEn: dist.nameEn,
+                        nameZh: dist.nameZh,
+                        temperature: tempVal,
+                        rainfall: rainVal,
+                        condition: condText
+                    };
+                });
+
+                const results = await Promise.all(requests);
+                const nowTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+                setOwmStatus(
+                    "success",
+                    "Live",
+                    `<strong>成功！</strong> 已從 OpenWeatherMap 獲取最新天氣 (${nowTime})。`
+                );
+                renderWeatherCards("owm-cards-list", results);
+
+            } catch (err) {
+                console.error("OpenWeatherMap API Error:", err);
+                const is401 = err.status === 401 || (err.message && err.message.toLowerCase().includes("invalid api key"));
+
+                const errorMsg = is401
+                    ? "<strong>API Key 無效 (HTTP 401)：</strong> OpenWeatherMap 拒絕了此密鑰。請檢查是否複製完整（新申請的 Key 需等待約 10–15 分鐘生效）。"
+                    : `<strong>調取失敗：</strong> ${err.message}。請檢查你的 API Key 或網絡連接。`;
+
+                setOwmStatus("error", "Invalid Key", errorMsg);
+                renderOwmLockedCards("Invalid API Key (401)");
+            }
+        }
+
+        // Initialize app on load
+        window.addEventListener("DOMContentLoaded", () => {
+            fetchHkoWeather();
+            renderOwmLockedCards("Locked • Enter API Key");
+
+            const savedKey = localStorage.getItem("kelvin_owm_key");
+            if (savedKey) {
+                document.getElementById("owm-key-input").value = savedKey;
+                syncCodeSnippetKey(savedKey);
+            }
+        });
+    </script>
+</body>
+</html>
